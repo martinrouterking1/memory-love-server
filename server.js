@@ -10,6 +10,14 @@ let gameState = {
   scores: [0, 0]
 };
 
+function broadcast(data) {
+  players.forEach(p => {
+    if (p.readyState === WebSocket.OPEN) {
+      p.send(JSON.stringify(data));
+    }
+  });
+}
+
 wss.on("connection", ws => {
   if (players.length >= 2) {
     ws.send(JSON.stringify({ type: "full" }));
@@ -22,24 +30,29 @@ wss.on("connection", ws => {
 
   ws.send(JSON.stringify({
     type: "init",
-    playerId,
-    gameState
+    playerId
   }));
 
-  broadcast();
+  // 🔑 QUANDO CI SONO 2 GIOCATORI → PARTI
+  if (players.length === 2) {
+    broadcast({
+      type: "start",
+      gameState
+    });
+  }
 
   ws.on("message", msg => {
     const data = JSON.parse(msg);
 
     if (data.type === "match" && gameState.turn === playerId) {
       gameState.scores[playerId]++;
+      broadcast({ type: "update", gameState });
     }
 
     if (data.type === "turn" && gameState.turn === playerId) {
       gameState.turn = 1 - gameState.turn;
+      broadcast({ type: "update", gameState });
     }
-
-    broadcast();
   });
 
   ws.on("close", () => {
@@ -48,11 +61,3 @@ wss.on("connection", ws => {
   });
 });
 
-function broadcast() {
-  players.forEach(p =>
-    p.send(JSON.stringify({
-      type: "update",
-      gameState
-    }))
-  );
-}
